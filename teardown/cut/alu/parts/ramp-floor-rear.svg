@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="155mm" height="112mm" viewBox="0 0 155 112">
+<title>ramp-floor-rear · 3 mm 5052 aluminium</title>
+<g id="cut" fill="none" stroke="#ff0000" stroke-width="0.1"><path d="M2 107L15.241 107L15.241 110L36.965 110L36.965 107L113.118 107L113.118 110L135.118 110L135.118 107L152.932 107L152.932 5L36.965 5L36.965 2L15.241 2L15.241 5L135.118 5L135.118 2L113.118 2L113.118 5L2 5Z"/></g>
+<g id="engrave" fill="#0000ff" font-family="sans-serif" font-size="5" text-anchor="middle"><text x="77.466" y="56">ramp-floor-rear</text></g>
+</svg>

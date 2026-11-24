@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="228mm" height="107mm" viewBox="0 0 228 107">
+<title>ramp-front-right · 3 mm 5052 aluminium</title>
+<g id="cut" fill="none" stroke="#ff0000" stroke-width="0.1"><path d="M5 102L57.75 102L57.75 105L79.75 105L79.75 102L132.5 102L132.5 64L177.5 64L177.5 102L194.32 102L194.32 105L208.78 105L208.78 102L225.6 102L225.6 2L5 12L5 72.06L2 72.06L2 91.515L5 91.515Z"/><path d="M212.54 65.06L212.54 42.94L215.66 42.94L215.66 65.06Z"/><path d="M212.441 50.536L190.654 51.524L190.795 54.641L212.582 53.653Z"/><path d="M108.674 55.24L86.577 56.242L86.718 59.359L108.815 58.357Z"/><path d="M50.918 57.858L28.821 58.86L28.962 61.977L51.059 60.975Z"/></g>
+<g id="engrave" fill="#0000ff" font-family="sans-serif" font-size="5" text-anchor="middle"><text x="113.8" y="53.5">ramp-front-right</text></g>
+</svg>

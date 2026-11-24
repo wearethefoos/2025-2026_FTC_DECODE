@@ -5,14 +5,14 @@
 import * as THREE from 'three';
 import {runSim} from 'teardown-kit/runtime.js';
 import {createConsole, DISPLAY} from './console.js';
-import {FRONT} from './paths.js';
+import {BODY, FRONT} from './paths.js';
 import {BALL, HIVE, R, cellTarget, hiveCell, toWorld, turretGap, D2R} from './robot.js';
-import {BALLS, DURATION, SHOTS, PICKS, arcAt, ballAt, flowerPos, flyAngle, heldAt, intakeOn, locAt, locHistory, poseAt, rockerAt, rollerAngle, scoreAt, tipTime, turretAt, upCellAt, velAt, wheelAngles} from './routine.js';
+import {BALLS, DURATION, SHOTS, PICKS, arcAt, ballAt, flowerPos, flyAngle, heldAt, intakeOn, liftAngle, locAt, locHistory, poseAt, rockerAt, rollerAngle, scoreAt, tipTime, turretAt, upCellAt, velAt, wheelAngles} from './routine.js';
 import {createStage} from './stage.js';
 
 export {DURATION};
 // the routine's chapters: the buttons in ROUTINE jump here
-export const SEQ_AT = {driveby: 1.5, flower: 5.6, spill: 16.4, sweep: 22.5};
+export const SEQ_AT = {driveby: 1.5, flower: 5.6, spill: 16.4, sweep: 23.4};
 export const SCRIPT = [
   {t: 0, view: 'hero'},
   {t: 1.0, display: 'arcs'},
@@ -25,20 +25,27 @@ export const SCRIPT = [
   {t: 7.9, display: 'aim'},
   {t: 8.4, view: 'intake'},
   {t: 9.0, display: 'xray'},
+  {t: 9.9, view: 'sorter'},
   {t: 11.9, display: 'xray'},
   {t: 12.3, view: 'turrets'},
   {t: 13.0, display: 'labels'},
   {t: 15.9, display: 'labels'},
   {t: 16.4, seq: 'spill'},
   {t: 16.8, view: 'chase'},
-  {t: 22.5, seq: 'sweep'},
-  {t: 22.8, view: 'top'},
-  {t: 23.1, display: 'envelopes'},
-  {t: 23.5, display: 'arcs'},
-  {t: 26.5, display: 'envelopes'},
-  {t: 26.7, view: 'hero'},
-  {t: 27.1, display: 'parts'},
+  {t: 20.2, view: 'sorter'},
+  {t: 20.4, display: 'xray'},
+  {t: 22.3, display: 'xray'},
+  {t: 22.4, view: 'chase'},
+  {t: 23.4, seq: 'sweep'},
+  {t: 23.6, view: 'top'},
+  {t: 23.9, display: 'envelopes'},
+  {t: 24.3, display: 'arcs'},
+  {t: 27.3, display: 'envelopes'},
+  {t: 27.5, view: 'hero'},
+  {t: 28.3, mat: 'alu'},
 ];
+/** the body material the script has chosen by t */
+export const materialAt = (t) => SCRIPT.filter((e) => e.mat && e.t <= t).pop()?.mat ?? 'ply';
 export const DEFAULTS = {duration: DURATION, fps: 60, theme: 'light', hud: {enabled: false, title: 'pollinator', subtitle: ''}, director: {enabled: false}, watermark: ''};
 const smoother = (x) => {
   const u = Math.min(1, Math.max(0, x));
@@ -89,6 +96,11 @@ export const VIEW_FN = {
     return {tx: c[0], ty: c[1], tz: c[2], az: p.psi / D2R - 100 + 1.5 * u, el: 14, d: 1.0, sx: 0, sy: -40};
   },
   field: (p, u) => ({tx: 0.55, ty: 0.25, tz: 0.05, az: 58 + 1.2 * u, el: 36, d: 5.3, sx: 0, sy: -30}),
+  sorter: (p, u) => {
+    // low from behind, under the deck, through the x-rayed walls: POLLEN rolls one way, NECTAR the other
+    const c = W(p, [0, 0.09, BODY.sortZ / 1000]);
+    return {tx: c[0], ty: c[1], tz: c[2], az: p.psi / D2R + 180 + 10 + 1.2 * u, el: 6, d: 0.95, sx: 0, sy: -40};
+  },
 };
 const VIEWS = SCRIPT.filter((e) => e.view).map((e) => [e.t, e.view]);
 const blend = (a, b, k) => {
@@ -119,6 +131,7 @@ export function makeCursor(ui) {
     if (e.seq) out.push({t: e.t, spot: ui.spots[e.seq]});
     if (e.view) out.push({t: e.t, spot: ui.spots[e.view]});
     if (e.display) out.push({t: e.t, spot: ui.spots[e.display]});
+    if (e.mat) out.push({t: e.t, spot: ui.spots[e.mat]});
     return out;
   });
   const WP = [[0, 900, 600]];
@@ -159,13 +172,13 @@ const PARTS = [
   {name: 'NECTAR TURRET', sub: '91 MM BALLS · ±170°', at: () => [TN.x, R.podY + 0.07, TN.z]},
   {name: 'DUAL FLYWHEELS', sub: '40:47 GEARED · TOP 15% SLOWER', at: () => [TN.x, R.podY, TN.z + 0.03]},
   {name: 'HOOD SERVO', sub: 'SMART ROBOT SERVO · 42–62°', at: () => [TP.x + TP.cheek + 0.013, R.podY, TP.z]},
-  {name: 'TURRET DRIVE', sub: '30T PINION → 60T PRINTED RING', at: () => [TP.x + 0.064, 0.18, TP.z - 0.064]},
-  {name: 'FLYWHEEL MOTOR', sub: 'HD HEX · 3:1 · 30:20 BELT', at: () => [TN.x, R.podY - 0.03, TN.z - R.motorBack]},
+  {name: 'SIZE SORTER', sub: '80 MM GAP · POLLEN DROPS, NECTAR RIDES', at: () => [0, 0.07, BODY.sortZ / 1000]},
+  {name: 'LIFT', sub: '3 TPU WHEELS · ONE SERVO', at: () => [TP.x, 0.1, TP.z - 0.05]},
+  {name: 'LASER-CUT BODY', sub: '6 MM PLY · SLOT AND TAB', at: () => [0.2286, 0.15, 0.12]},
   {name: 'FRONT INTAKE', sub: 'TPU FLAPS · FITS THE 3.55 IN. SLOT', at: () => [0.1, 0.05, FRONT - 0.02]},
-  {name: 'SORTER', sub: 'COLOR SENSOR V3 + DIVERTER', at: () => [0, 0.09, 0.07]},
-  {name: 'ODOMETRY PODS', sub: '2 × GOBILDA · PINPOINT', at: () => [0.088, 0.03, -0.07]},
+  {name: 'COLOUR SENSOR', sub: 'COUNTS · REJECTS RED NECTAR', at: () => [0, 0.054, (BODY.sortZ + BODY.gap / 2 + 18) / 1000]},
+  {name: 'ODOMETRY PODS', sub: '2 × GOBILDA · PINPOINT', at: () => [0.09, 0.03, 0.095]},
   {name: 'MECANUM DRIVE', sub: 'HD HEX 12:1 · 75 MM · 1.96 M/S', at: () => [R.wheelX + 0.02, R.wheelR, R.wheelZ]},
-  {name: 'CONTROL HUB', sub: 'REV · + EXPANSION HUB', at: () => [0.19, 0.15, 0.0]},
 ];
 export function makeLabels(st) {
   return (pose, o) => {
@@ -193,25 +206,32 @@ export function makeLabels(st) {
 
 // ------------------------------------------------------------ the phase line and the state chip
 const PHASES = [
-  [0, 'HOLDING 2 POLLEN + 2 NECTAR · TURRETS ALREADY ON THE CELL'],
-  [1.5, 'DRIVE-BY · STRAFING AT 0.7 M/S, TURRETS LEAD THE CELL'],
-  [2.6, 'POLLEN AWAY · 4.7 M/S, 100 RPM BACKSPIN'],
+  [0, '2 POLLEN + 2 NECTAR · TURRETS ON THE CELL'],
+  [1.5, 'DRIVE-BY · 0.7 M/S STRAFE · TURRETS LEAD'],
+  [2.6, 'POLLEN AWAY · 4.7 M/S · 100 RPM SPIN'],
   [3.2, 'NECTAR AWAY'],
   [4.0, 'POLLEN AWAY · THE CELL HOLDS 6'],
   [4.95, 'HIVE TIP · +20 · THE FAR CELL COMES UP'],
-  [5.6, 'TURN TO THE FLOWER · TURRETS COUNTER-ROTATE'],
-  [8.6, 'FRONT INTAKE INTO THE RETRIEVAL OPENING'],
-  [9.05, 'POLLEN OUT OF THE BOTTOM · COLOR SENSOR → POLLEN LANE'],
-  [10.65, 'SECOND POLLEN OUT · 4 HELD, THE G407 LIMIT'],
-  [12.4, 'BOTH TURRETS SWING TO THE FLOWER TOP · LOB MODE'],
+  [5.6, 'TO THE FLOWER · TURRETS COUNTER-ROTATE'],
+  [8.6, 'FRONT INTAKE INTO THE OPENING'],
+  [9.05, 'POLLEN OUT OF THE BOTTOM · UP THE LIP'],
+  [10.1, '71 MM · DROPS THROUGH THE 80 MM SORTER'],
+  [10.55, 'POLLEN LIFT · HELD UNDER THE DECK'],
+  [11.7, 'SECOND POLLEN WAITS AT THE FOOT'],
+  [12.4, 'BOTH TURRETS TO THE FLOWER TOP · LOB'],
   [13.8, 'POLLEN PLACED THROUGH THE 4 IN. TOP'],
-  [15.3, 'NECTAR ON TOP · TOP-MOST NECTAR OWNS THE FLOWER'],
-  [16.4, 'REVERSE INTO THE SPILL · REAR INTAKE LEADS'],
-  [18.6, 'SHOOTING OVER THE BACK · 122° TURRET YAW'],
-  [19.4, 'REAR INTAKE PICKS UP A SPILLED POLLEN'],
-  [20.55, 'COLLECT, SORT, SHOOT · WHILE DRIVING'],
-  [22.5, 'CLEARANCE CHECK · BOTH TURRETS SWEEP ±170°'],
-  [26.4, 'TURRETS HOME'],
+  [15.3, 'NECTAR ON TOP · TOP-MOST NECTAR OWNS IT'],
+  [16.4, 'REVERSE INTO THE SPILL · REAR INTAKE'],
+  [18.6, 'OVER THE BACK · 122° TURRET YAW'],
+  [19.4, 'REAR INTAKE PICKS UP A POLLEN'],
+  [20.9, 'AND A NECTAR · UP THE REAR RAMP'],
+  [21.2, 'POLLEN AWAY ON THE MOVE'],
+  [21.6, '91 MM · RIDES THE SORTER RAILS'],
+  [22.05, 'NECTAR LIFT · SIZE SORTED IT'],
+  [22.75, 'NECTAR AWAY'],
+  [23.4, 'CLEARANCE CHECK · BOTH SWEEP ±170°'],
+  [27.3, 'TURRETS HOME'],
+  [28.3, 'THE SAME BODY IN 3 MM ALUMINIUM'],
 ];
 export const TICKS = Object.values(SEQ_AT);
 export const phaseAt = (t) => PHASES.filter(([a]) => a <= t).pop()[1];
@@ -219,7 +239,7 @@ const CHAPTER = [
   [0, 'START', 'DRIVE-BY'],
   [5.6, 'DRIVE-BY', 'FLOWER'],
   [16.4, 'FLOWER', 'SPILL'],
-  [22.5, 'SPILL', 'SWEEP'],
+  [23.4, 'SPILL', 'SWEEP'],
 ];
 const chapterAt = (t) => CHAPTER.filter(([a]) => a <= t).pop();
 export function stateChip(t) {
@@ -246,12 +266,7 @@ export function frameState(t, disp) {
     tu[key] = {yaw: s.yaw, hood: s.hood, fly: flyAngle(key, t), feed: feeding ? t * 30 : 0, mode: s.mode, rpm: s.rpm, sol: s.sol};
   }
   // which way the sorter's diverter points: toward the lane of the ball crossing it
-  let divert = 0;
-  const balls = BALLS.map((b) => {
-    const r = ballAt(b, t);
-    if (r.sort) divert = b.kind === 'pollen' ? 1 : -1;
-    return r;
-  });
+  const balls = BALLS.map((b) => ballAt(b, t));
   // odometry pod wheels: the mecanum wheels' mean forward and strafe roll
   const fwd = (R.wheelR * (wheels[0] + wheels[1] + wheels[2] + wheels[3])) / 4;
   const str = (R.wheelR * (-wheels[0] + wheels[1] + wheels[2] - wheels[3])) / 4;
@@ -294,7 +309,8 @@ export function frameState(t, disp) {
         wheels,
         turret: tu,
         roll: {front: rollerAngle('front', t), rear: rollerAngle('rear', t)},
-        divert,
+        lift: {pollen: liftAngle('pollen', t), nectar: liftAngle('nectar', t)},
+        material: disp.material ?? 'ply',
         podSpin: {fwd: fwd / 0.016, strafe: str / 0.016},
         envelope: disp.envelopes,
         xray: disp.xray,
@@ -332,6 +348,7 @@ export function makeConsoleFrame(ui, st) {
       score: scoreAt(t),
       gap: turretGap(),
       seq: s.seq,
+      material: s.material ?? 'ply',
       view: s.view,
       display: s.display,
       paused: s.paused ?? false,
@@ -365,11 +382,11 @@ export function makeFilm() {
       render(t) {
         const disp = displayAt(t);
         const eased = Object.fromEntries(DISPLAY.map((k) => [k, easedDisplay(k, t)]));
-        const f = frameState(t, eased);
+        const f = frameState(t, {...eased, material: materialAt(t)});
         const cam = camAt(t);
         st.frame(f.scene, {...cam, az: cam.az * D2R, el: cam.el * D2R});
         const [vt0, view] = viewAt(t);
-        consoleFrame(t, {f, seq: seqAt(t), view, display: disp, labels: eased.labels * ss(vt0 + 0.9, vt0 + 1.5, t), cursor: cursorAt(t)});
+        consoleFrame(t, {f, seq: seqAt(t), view, display: disp, material: materialAt(t), labels: eased.labels * ss(vt0 + 0.9, vt0 + 1.5, t), cursor: cursorAt(t)});
         return {};
       },
     };

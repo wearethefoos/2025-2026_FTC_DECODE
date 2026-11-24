@@ -5,8 +5,8 @@
 import {CAT_COL} from './build.js';
 
 export const C = {ink: '#20252b', mute: '#87909a', faint: '#cfd6de', line: '#dfe4ea', panel: 'rgba(250,251,252,.95)', or: '#e4572e', green: '#2f9d5c', pol: '#c99400', nec: '#2563c9', soft: '#eef1f4'};
-export const VIEWS = ['hero', 'chase', 'top', 'turrets', 'intake', 'field'];
-export const VIEW_LABEL = {hero: 'HERO', chase: 'CHASE', top: 'TOP', turrets: 'TURRETS', intake: 'INTAKE', field: 'FIELD'};
+export const VIEWS = ['hero', 'chase', 'top', 'turrets', 'intake', 'sorter', 'field'];
+export const VIEW_LABEL = {hero: 'HERO', chase: 'CHASE', top: 'TOP', turrets: 'TURRETS', intake: 'INTAKE', sorter: 'SORTER', field: 'FIELD'};
 export const DISPLAY = ['labels', 'xray', 'arcs', 'envelopes', 'aim', 'parts'];
 export const DISPLAY_LABEL = {labels: 'LABELS', xray: 'X-RAY', arcs: 'ARCS', envelopes: 'ENVELOPES', aim: 'AIM LINES', parts: 'PARTS'};
 export const SEQS = ['driveby', 'flower', 'spill', 'sweep'];
@@ -160,19 +160,25 @@ export function createConsole(app) {
   panel(1313, 562, 258, 104, 'DISPLAY', '06');
   btnRow(DISPLAY, DISPLAY_LABEL, 1327, 598);
 
-  // ------------------------------------------------------------ 09 system
-  panel(1313, 680, 258, 164, 'SYSTEM', '09');
-  [['8/8', 'MOTORS'], ['7/8', 'SERVOS'], ['24″', 'MAX LENGTH']].forEach(([v, n], i) => {
+  // ------------------------------------------------------------ 09 system: the budget, the body material, the parts key
+  panel(1313, 680, 258, 182, 'SYSTEM', '09');
+  add(`<div style="position:absolute;left:1453px;top:688px;width:104px;height:22px;border-radius:4px;background:${C.soft}"></div>`);
+  btn.ply = add(`<div class="bt" style="left:1455px;top:690px;width:49px;height:18px;border:none;background:transparent;padding:0;font-size:8.4px">PLY</div>`);
+  btn.alu = add(`<div class="bt" style="left:1506px;top:690px;width:49px;height:18px;border:none;background:transparent;padding:0;font-size:8.4px">ALU</div>`);
+  [['8/8', 'MOTORS'], ['8/8', 'SERVOS'], ['24″', 'MAX LENGTH']].forEach(([v, n], i) => {
     const x = 1327 + i * 80;
-    if (i) add(`<div style="position:absolute;left:${x - 8}px;top:716px;width:1px;height:38px;background:${C.line}"></div>`);
-    add(`<div style="position:absolute;left:${x}px;top:716px;font-size:20px;font-weight:700">${v}</div>`);
-    add(`<div class="sm" style="position:absolute;left:${x}px;top:741px">${n}</div>`);
+    if (i) add(`<div style="position:absolute;left:${x - 8}px;top:718px;width:1px;height:38px;background:${C.line}"></div>`);
+    add(`<div style="position:absolute;left:${x}px;top:718px;font-size:20px;font-weight:700">${v}</div>`);
+    add(`<div class="sm" style="position:absolute;left:${x}px;top:743px">${n}</div>`);
   });
-  add(`<div style="position:absolute;left:1327px;top:762px;width:230px;height:1px;background:${C.line}"></div>`);
-  const legend = add(`<div style="position:absolute;left:1327px;top:772px;width:230px"></div>`);
-  legend.innerHTML = [['rev', 'REV ROBOTICS'], ['printed', '3D-PRINTED · PETG-CF / TPU'], ['cots', 'LIMELIGHT 3A · GOBILDA PODS']]
-    .map(([k, n]) => `<div class="sm" style="display:flex;align-items:center;gap:7px;height:19px"><i style="display:block;width:10px;height:10px;border-radius:2px;background:${CAT_COL[k]}"></i>${n}</div>`)
-    .join('');
+  add(`<div style="position:absolute;left:1327px;top:764px;width:230px;height:1px;background:${C.line}"></div>`);
+  const legend = add(`<div style="position:absolute;left:1327px;top:771px;width:230px"></div>`);
+  const legendRows = [['laser', ''], ['rev', 'REV ROBOTICS'], ['printed', '3D-PRINTED · PETG-CF / TPU'], ['cots', 'LIMELIGHT 3A · GOBILDA PODS']];
+  const drawLegend = (mat) =>
+    (legend.innerHTML = legendRows
+      .map(([k, n]) => `<div class="sm" style="display:flex;align-items:center;gap:7px;height:19px"><i style="display:block;width:10px;height:10px;border-radius:2px;background:${CAT_COL[k]}"></i>${k === 'laser' ? `LASER-CUT · ${mat === 'alu' ? '3 MM 5052 ALUMINIUM' : '6 MM BIRCH PLYWOOD'}` : n}</div>`)
+      .join(''));
+  let legendFor = '';
 
   // ------------------------------------------------------------ 07 routine timeline
   panel(430, 752, 740, 108, 'MATCH ROUTINE', '07');
@@ -248,7 +254,8 @@ export function createConsole(app) {
       cell(6, T.map((t, i) => (live[i] ? `${Math.round(t.sol.spin)}` : '—')));
       cell(7, T.map((t, i) => (live[i] ? t.sol.tf.toFixed(2) : '—')));
       cell(8, T.map((t, i) => (live[i] ? t.sol.d.toFixed(2) : '—')));
-      cell(9, T.map((t, i) => (live[i] ? `${Math.min(99, t.sol.err * 1000).toFixed(1)}` : '—')));
+      // no arc reaches the target from here (driving hard at it, or past the turret's stop): say so
+      cell(9, T.map((t, i) => (!live[i] ? '—' : t.sol.err > 0.05 ? 'NO SHOT' : `${(t.sol.err * 1000).toFixed(1)}`)), T.map((t) => (t.sol.err > 0.05 ? C.or : C.ink)));
       // 02: localization
       const L = s.loc;
       locRows[0].textContent = `${L.est.x >= 0 ? '+' : '−'}${Math.abs(L.est.x).toFixed(3)} m`;
@@ -323,7 +330,17 @@ export function createConsole(app) {
       }
       for (const k of VIEWS) onBtn(k, s.view === k);
       for (const k of DISPLAY) onBtn(k, !!s.display[k]);
-      legend.style.opacity = s.display.parts ? '1' : '.55';
+      legend.style.opacity = s.display.parts ? '1' : '.6';
+      if (legendFor !== s.material) {
+        legendFor = s.material;
+        drawLegend(s.material);
+      }
+      for (const k of ['ply', 'alu']) {
+        const on = s.material === k;
+        btn[k].style.background = on ? C.or : 'transparent';
+        btn[k].style.color = on ? '#fff' : '#7d8690';
+        btn[k].style.borderRadius = '3px';
+      }
       // 07 timeline
       btn.play.innerHTML = s.paused ? '▶' : '❚❚';
       opFrom.textContent = s.from;

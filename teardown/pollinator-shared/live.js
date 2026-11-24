@@ -4,7 +4,7 @@
 // cursor, looped; a click, drag, wheel or key hands control to the visitor, 25 s of quiet hands it back.
 import {warmComposer} from 'teardown-kit/warm.js';
 import {createConsole, DISPLAY, SEQS, VIEWS} from './console.js';
-import {displayAt, DURATION, frameState, makeConsoleFrame, makeCursor, seqAt, SEQ_AT, SCRIPT, viewAt, VIEW_FN, camAt} from './film.js';
+import {displayAt, DURATION, frameState, makeConsoleFrame, makeCursor, materialAt, seqAt, SEQ_AT, SCRIPT, viewAt, VIEW_FN, camAt} from './film.js';
 import {poseAt} from './routine.js';
 import {createStage} from './stage.js';
 
@@ -93,6 +93,7 @@ export function runLive() {
   let speed = 1;
   let paused = false;
   let view = 'hero';
+  let material = 'ply';
   let viewAt0 = 0;
   const disp = Object.fromEntries(DISPLAY.map((k) => [k, {on: 0, t: -9}]));
   const off = {az: 0, el: 0, k: 1};
@@ -168,6 +169,12 @@ export function runLive() {
       disp[k].on = disp[k].on ? 0 : 1;
       disp[k].t = T;
     });
+  for (const m of ['ply', 'alu'])
+    ui.btn[m].addEventListener('click', () => {
+      takeOver();
+      pulse(m);
+      material = m;
+    });
   ui.btn.play.addEventListener('click', () => {
     takeOver();
     pulse('play');
@@ -204,7 +211,7 @@ export function runLive() {
   addEventListener('keydown', (e) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     const key = e.key.toLowerCase();
-    const v = {1: 'hero', 2: 'chase', 3: 'top', 4: 'turrets', 5: 'intake', 6: 'field'}[key];
+    const v = {1: 'hero', 2: 'chase', 3: 'top', 4: 'turrets', 5: 'intake', 6: 'sorter', 7: 'field'}[key];
     if (v) ui.btn[v].click();
     else if (key === ' ') ui.btn.play.click();
     else if (key === 'x') ui.btn.xray.click();
@@ -212,6 +219,7 @@ export function runLive() {
     else if (key === 'e') ui.btn.envelopes.click();
     else if (key === 'l') ui.btn.labels.click();
     else if (key === 'p') ui.btn.parts.click();
+    else if (key === 'm') ui.btn[material === 'ply' ? 'alu' : 'ply'].click();
     else if (key === 'arrowright') {
       takeOver();
       tau = Math.min(DURATION, tau + 1);
@@ -285,6 +293,7 @@ export function runLive() {
       const cyc = c - loop * DURATION;
       if (loop > AP.loop) AP.loop = loop;
       tau = cyc;
+      material = materialAt(cyc);
       syncDisplay(cyc);
       tgt = camAt(cyc);
       const [t0, v] = viewAt(cyc);
@@ -315,10 +324,10 @@ export function runLive() {
     cam.az += wrap(tgt.az - cam.az) * k;
     for (const key of ['tx', 'ty', 'tz', 'el', 'd', 'sx', 'sy']) cam[key] += (tgt[key] - cam[key]) * k;
     const e = Object.fromEntries(DISPLAY.map((x) => [x, eased(x)]));
-    const f = frameState(tau, e);
+    const f = frameState(tau, {...e, material});
     st.frame(f.scene, {...cam, az: cam.az * D2R, el: cam.el * D2R});
     const display = Object.fromEntries(DISPLAY.map((x) => [x, disp[x].on]));
-    frameConsole(tau, {f, seq: seqAt(tau), view, display, labels: e.labels * ss(0.9, 1.5, since), cursor, paused: AP.on ? false : paused, speed: AP.on ? 1 : speed, speedK: speedK(AP.on ? 1 : speed)});
+    frameConsole(tau, {f, seq: seqAt(tau), view, display, material, labels: e.labels * ss(0.9, 1.5, since), cursor, paused: AP.on ? false : paused, speed: AP.on ? 1 : speed, speedK: speedK(AP.on ? 1 : speed)});
     if (tourChip.classList.contains('on') !== AP.on || !tourChip.firstChild) {
       tourChip.classList.toggle('on', AP.on);
       tourChip.innerHTML = AP.on ? '<i></i>AUTO TOUR · CLICK TO TAKE OVER' : '▶ RESUME TOUR';

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="222mm" height="118mm" viewBox="0 0 222 118">
+<title>ramp-floor-front · 6 mm birch plywood</title>
+<g id="cut" fill="none" stroke="#ff0000" stroke-width="0.1"><path d="M2 110L15.23 110L15.23 116L36.921 116L36.921 110L118.356 110L118.356 116L140.356 116L140.356 110L174.672 110L174.672 116L196.672 116L196.672 110L219.83 110L219.83 8L36.921 8L36.921 2L15.23 2L15.23 8L196.672 8L196.672 2L174.672 2L174.672 8L140.356 8L140.356 2L118.356 2L118.356 8L2 8Z"/></g>
+<g id="engrave" fill="#0000ff" font-family="sans-serif" font-size="5" text-anchor="middle"><text x="110.915" y="59">ramp-floor-front</text></g>
+</svg>

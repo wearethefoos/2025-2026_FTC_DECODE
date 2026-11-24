@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="90mm" height="158mm" viewBox="0 0 90 158">
+<title>pollen-tower-outer · 3 mm 5052 aluminium</title>
+<g id="cut" fill="none" stroke="#ff0000" stroke-width="0.1"><path d="M5 153L34 153L34 156L56 156L56 153L85 153L85 121L88 121L88 99L85 99L85 59L88 59L88 37L85 37L85 5L56 5L56 2L34 2L34 5L5 5L5 37L2 37L2 59L5 59L5 99L2 99L2 121L5 121Z"/></g>
+<g id="engrave" fill="#0000ff" font-family="sans-serif" font-size="5" text-anchor="middle"><text x="45" y="79">pollen-tower-outer</text></g>
+</svg>

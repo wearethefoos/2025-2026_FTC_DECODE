@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="182mm" height="164mm" viewBox="0 0 182 164">
+<title>bulkhead-rear-left · 6 mm birch plywood</title>
+<g id="cut" fill="none" stroke="#ff0000" stroke-width="0.1"><path d="M8 156L47.4 156L47.4 162L69.4 162L69.4 156L112.2 156L112.2 162L134.2 162L134.2 156L173.6 156L173.6 121L179.6 121L179.6 99L173.6 99L173.6 65L179.6 65L179.6 43L173.6 43L173.6 8L134.2 8L134.2 2L112.2 2L112.2 8L69.4 8L69.4 2L47.4 2L47.4 8L8 8L8 97L2 97L2 119L8 119Z"/><circle cx="147" cy="118" r="1.65"/><circle cx="147" cy="58" r="1.65"/><circle cx="71" cy="65" r="1.65"/><circle cx="71" cy="35" r="1.65"/></g>
+<g id="engrave" fill="#0000ff" font-family="sans-serif" font-size="5" text-anchor="middle"><text x="90.8" y="82">bulkhead-rear-left</text></g>
+</svg>

@@ -7,11 +7,12 @@
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {BALL, R, nOff} from './robot.js';
-import {LANE, RAMP_FLOOR, ROLLER_Y, SORT_Y} from './paths.js';
+import {BODY, FRONT, LIFT_ROLLER, ROLLER_Y} from './paths.js';
+import {buildPlates} from './plates.js';
 
 const V3 = THREE.Vector3;
-export const CAT = {rev: 'REV', printed: 'PRINTED', tpu: 'PRINTED', cots: 'OTHER COTS'};
-export const CAT_COL = {rev: '#9aa3ad', printed: '#2f7fc1', tpu: '#1f5c8f', cots: '#3a9d63'};
+export const CAT = {rev: 'REV', printed: 'PRINTED', tpu: 'PRINTED', cots: 'OTHER COTS', laser: 'LASER-CUT'};
+export const CAT_COL = {rev: '#9aa3ad', printed: '#2f7fc1', tpu: '#1f5c8f', cots: '#3a9d63', laser: '#b9894f'};
 
 export function makeMaterials() {
   const std = (color, rough, metal, extra = {}) => new THREE.MeshStandardMaterial({color, roughness: rough, metalness: metal, envMapIntensity: 0.55, ...extra});
@@ -35,6 +36,9 @@ export function makeMaterials() {
     sign: std('#2a64c9', 0.7, 0.0),
     rubber: std('#1d1e21', 0.9, 0.0),
     roller: std('#4a4d52', 0.7, 0.0),
+    // the laser-cut body: faces and the darker cut edges
+    body_ply: [std('#dcc39a', 0.78, 0.0), std('#5e3e24', 0.9, 0.0)],
+    body_alu: [std('#c8cdd3', 0.38, 0.65), std('#8d949c', 0.45, 0.6)],
   };
 }
 
@@ -156,56 +160,49 @@ export function buildRobot() {
   };
   const HW = R.W / 2;
   const HL = R.L / 2;
-  const FY = R.frameY + 0.0075; // extrusion centre height
+  void HL;
+  const FY = 0.053; // sign centre height on the side plates, over its four bolt holes
+  const FRONT_M = FRONT;
+  const HL_M = BODY.half / 1000;
+  // the turrets sit on the deck's top face (a printed spacer makes up the difference on 3 mm aluminium)
+  const DECK_Y = (BODY.deckBottom + 6) / 1000;
 
-  // ---------------------------------------------------------- the frame: REV 15 mm extrusion, printed corner gussets
-  for (const sx of [-1, 1]) {
-    const e = extrusion(R.L - 0.03, 'z', mats);
-    e.position.set(sx * (HW - 0.0165), FY, 0);
-    addGroup(root, e, 'rev');
-  }
-  for (const sz of [-1, 1]) {
-    const e = extrusion(R.W - 0.063, 'x', mats);
-    e.position.set(0, FY, sz * (HL - 0.03));
-    addGroup(root, e, 'rev');
-    // mid cross rails carry the battery tray and the sorter
-    const m = extrusion(R.W - 0.063, 'x', mats);
-    m.position.set(0, FY, sz * 0.105);
-    addGroup(root, m, 'rev');
-  }
-  for (const sx of [-1, 1])
-    for (const sz of [-1, 1]) add(root, box(0.03, 0.022, 0.03, 0.003), mats.printed, 'printed', {x: sx * (HW - 0.0165), y: FY, z: sz * (HL - 0.03)});
-  // uprights to the turret deck
-  const DECK_Y = 0.17;
-  for (const sx of [-1, 1])
-    for (const z of [-0.165, 0.095]) {
-      const e = extrusion(DECK_Y - FY - 0.004, 'y', mats);
-      e.position.set(sx * (HW - 0.0165), (FY + DECK_Y) / 2, z);
-      addGroup(root, e, 'rev');
+  // ---------------------------------------------------------- the laser-cut body (plates.js): plywood first, aluminium later
+  const body = new THREE.Group();
+  root.add(body);
+  let bodyKey = '';
+  const setBody = (key) => {
+    if (key === bodyKey) return;
+    bodyKey = key;
+    for (const m of [...body.children]) {
+      body.remove(m);
+      m.geometry.dispose();
+      parts.splice(parts.indexOf(m), 1);
+      if (shells.includes(m)) shells.splice(shells.indexOf(m), 1);
     }
-  // the turret deck: a printed plate (4 tiles, bolted to the extrusion) with two holes for the turret rings
-  {
-    const sh = new THREE.Shape();
-    const x0 = -HW + 0.008;
-    const x1 = HW - 0.008;
-    const z0 = -0.19;
-    const z1 = 0.11;
-    sh.moveTo(x0, z0);
-    sh.lineTo(x1, z0);
-    sh.lineTo(x1, z1);
-    sh.lineTo(x0, z1);
-    sh.closePath();
-    for (const k of ['pollen', 'nectar']) {
-      const T = R.turret[k];
-      const h = new THREE.Path();
-      h.absarc(T.x, T.z, 0.052, 0, Math.PI * 2, true);
-      sh.holes.push(h);
+    const {plates} = buildPlates(key);
+    for (const pl of plates) {
+      const sh = new THREE.Shape(pl.poly.map(([u, v]) => new THREE.Vector2(u, v)));
+      for (const h of pl.holes) {
+        const path = new THREE.Path();
+        if (h.circle) path.absarc(h.circle[0], h.circle[1], h.circle[2], 0, Math.PI * 2, true);
+        else h.poly.forEach(([u, v], i) => (i ? path.lineTo(u, v) : path.moveTo(u, v)));
+        sh.holes.push(path);
+      }
+      for (const sl of pl.slots) {
+        const path = new THREE.Path();
+        sl.poly.forEach(([u, v], i) => (i ? path.lineTo(u, v) : path.moveTo(u, v)));
+        sh.holes.push(path);
+      }
+      const g = new THREE.ExtrudeGeometry(sh, {depth: pl.t, bevelEnabled: false, curveSegments: 24});
+      g.translate(0, 0, -pl.t / 2);
+      const M = new THREE.Matrix4().makeBasis(new V3(...pl.U), new V3(...pl.V), new V3(...pl.N)).setPosition(new V3(...pl.o));
+      g.applyMatrix4(M);
+      g.scale(0.001, 0.001, 0.001);
+      add(body, g, mats[`body_${key}`], 'laser', {shell: pl.name !== 'belly', name: pl.name});
     }
-    const g = new THREE.ExtrudeGeometry(sh, {depth: 0.006, bevelEnabled: false, curveSegments: 48});
-    // rotateX(+90) takes shape y to +z and the thickness downward
-    g.rotateX(Math.PI / 2);
-    add(root, g, mats.printed, 'printed', {y: DECK_Y, shell: true, name: 'deck'});
-  }
+  };
+  setBody('ply');
 
   // ---------------------------------------------------------- the drive: 4 mecanum wheels, HD Hex + UltraPlanetary
   const wheels = [];
@@ -249,8 +246,6 @@ export function buildRobot() {
     add(mo, cylX(0.0185, 0.07, 28), mats.motor, 'rev', {x: -sx * 0.098});
     add(mo, cylX(0.012, 0.012, 20), mats.aluDark, 'rev', {x: -sx * 0.139});
     root.add(mo);
-    // printed bearing block on the frame rail
-    add(root, box(0.012, 0.04, 0.03, 0.002), mats.printed, 'printed', {x: sx * (HW - 0.03), y: R.wheelR + 0.005, z: sz * R.wheelZ});
   }
 
   // ---------------------------------------------------------- electronics: Control Hub, Expansion Hub, battery, Pinpoint
@@ -260,12 +255,13 @@ export function buildRobot() {
     add(root, hubGeo, mats.hub, 'rev', {x: sx * 0.19, y: 0.122, z: -0.005, name});
     add(root, box(0.002, 0.03, 0.09, 0.0005), mats.hubLabel, 'rev', {x: sx * 0.174, y: 0.135, z: -0.005});
   }
-  add(root, box(0.075, 0.045, 0.15, 0.006), mats.battery, 'rev', {y: 0.036, z: -0.005, name: 'battery'});
-  add(root, box(0.028, 0.008, 0.042, 0.002), mats.pod, 'cots', {x: 0.06, y: DECK_Y + 0.007, z: -0.17, name: 'pinpoint'});
+  // the battery rides on the deck at the back, strapped through two slots: quick to swap
+  add(root, box(0.15, 0.045, 0.048, 0.006), mats.battery, 'rev', {y: DECK_Y + 0.0225, z: -0.204, name: 'battery'});
+  add(root, box(0.028, 0.008, 0.042, 0.002), mats.pod, 'cots', {x: -0.15, y: DECK_Y + 0.004, z: -0.165, name: 'pinpoint'});
 
   // ---------------------------------------------------------- odometry: two goBILDA pods (forward and strafe)
   const pods = [];
-  for (const [x, z, dir] of [[0.088, -0.07, 'fwd'], [-0.072, 0.075, 'strafe']]) {
+  for (const [x, z, dir] of [[0.09, 0.095, 'fwd'], [-0.11, 0.095, 'strafe']]) {
     const g = new THREE.Group();
     g.position.set(x, 0, z);
     if (dir === 'strafe') g.rotation.y = Math.PI / 2;
@@ -279,48 +275,39 @@ export function buildRobot() {
     pods.push({g, wh, dir});
   }
 
-  // ---------------------------------------------------------- the ball path: intake ramps, sorter, lanes
-  // front and rear ramps: printed U-channels rising from the intake mouth over the drive motors to the sorter
-  const ramp = (sz) => {
-    const pts = RAMP_FLOOR.map(([x, y, z]) => new V3(x, y - 0.004, sz * z));
-    const curve = new THREE.CatmullRomCurve3(pts);
-    // a U channel: a floor strip and two side rails along the same curve
-    const n = 48;
-    const fl = [];
-    const idx = [];
-    for (let i = 0; i <= n; i++) {
-      const p = curve.getPoint(i / n);
-      fl.push(-0.05, p.y, p.z, 0.05, p.y, p.z);
-      if (i) idx.push(2 * i - 2, 2 * i - 1, 2 * i, 2 * i - 1, 2 * i + 1, 2 * i);
+  // ---------------------------------------------------------- the transfer: a lift in each tower, colour sensors at the ramp tops
+  // Three TPU compliant wheels on one belt, behind the tower's rear wall, reach 10 mm through its window and roll the
+  // ball up the turret axis; a Smart Robot Servo (continuous) drives the belt. Stalled, it holds the ball under the deck.
+  const lifts = {};
+  for (const key of ['pollen', 'nectar']) {
+    const T = R.turret[key];
+    const inner = BODY.towerInner[key] / 2;
+    const zc = T.z - inner / 1000 - (BODY.liftWheelR - 10) / 1000;
+    const g = new THREE.Group();
+    g.position.set(T.x, 0, zc);
+    root.add(g);
+    const wheels = [];
+    for (const y of BODY.liftZ) {
+      const w = new THREE.Group();
+      w.position.y = y / 1000;
+      add(w, cylX(BODY.liftWheelR / 1000, 0.022, 24), mats.tpu, 'tpu', {name: `${key} lift wheel`});
+      for (let i = 0; i < 6; i++) add(w, box(0.024, 0.003, 0.016, 0.0008), mats.printedDark, 'printed', {rx: (i / 6) * Math.PI});
+      add(w, cylX(0.0045, 0.05, 8), mats.steel, 'rev');
+      g.add(w);
+      wheels.push(w);
     }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(fl, 3));
-    g.setIndex(idx);
-    g.computeVertexNormals();
-    const fm = add(root, g, mats.printedLight, 'printed', {shell: true, name: 'ramp'});
-    fm.material = mats.printedLight;
-    for (const s of [-1, 1]) {
-      const c2 = new THREE.CatmullRomCurve3(pts.map((p) => new V3(s * 0.052, p.y + 0.03, p.z)));
-      add(root, new THREE.TubeGeometry(c2, 40, 0.0035, 6, false), mats.printedLight, 'printed', {shell: true});
-    }
-  };
-  ramp(1);
-  ramp(-1);
-  // the sorter: a printed bowl at the centre with the REV Color Sensor V3 under it, a servo-driven diverter flap
-  add(root, cylY(0.055, 0.006, 40), mats.printedLight, 'printed', {y: SORT_Y - 0.007, z: 0.05, shell: true, name: 'sorter'});
-  const colorSensor = add(root, box(0.024, 0.008, 0.024, 0.002), mats.hub, 'rev', {y: SORT_Y - 0.015, z: 0.05, name: 'color'});
-  const diverter = new THREE.Group();
-  diverter.position.set(0, SORT_Y + 0.035, 0.105);
-  add(diverter, box(0.004, 0.06, 0.09, 0.0015), mats.printed, 'printed', {y: 0, z: -0.045});
-  root.add(diverter);
-  add(root, box(0.02, 0.04, 0.04, 0.003), mats.servo, 'rev', {y: 0.15, z: 0.12, name: 'diverter servo'});
-  // the lanes: printed tubes from the sorter up into each turret's hollow ring
-  for (const k of ['pollen', 'nectar']) {
-    const T = R.turret[k];
-    const sx = Math.sign(T.x);
-    const pts = LANE(k).map((p) => new V3(...p));
-    const c = new THREE.CatmullRomCurve3(pts);
-    add(root, new THREE.TubeGeometry(c, 30, BALL[k].d / 2 + 0.006, 18, false), mats.printedLight, 'printed', {shell: true, name: `${k} lane`});
+    // the belt linking them, and the printed bracket that carries the axles
+    const y0 = BODY.liftZ[0] / 1000;
+    const y1 = BODY.liftZ[BODY.liftZ.length - 1] / 1000;
+    for (const sx_ of [-1, 1]) add(g, box(0.004, y1 - y0 + 0.016, 0.01, 0.002), mats.rubber, 'rev', {x: 0.016 + 0.004, y: (y0 + y1) / 2, z: sx_ * 0.008});
+    add(g, box(0.006, y1 - y0 + 0.04, 0.03, 0.002), mats.printed, 'printed', {x: -0.018, y: (y0 + y1) / 2, z: -0.012});
+    add(g, box(0.02, 0.04, 0.04, 0.003), mats.servo, 'rev', {x: 0.034, y: y0, z: -0.02, name: `${key} lift servo`});
+    lifts[key] = wheels;
+  }
+  // a REV Color Sensor V3 under each ramp's top end: it counts balls and catches a red NECTAR before it is sorted
+  for (const sz of [1, -1]) {
+    const z = (BODY.sortZ + sz * (BODY.gap / 2 + 18)) / 1000;
+    add(root, box(0.024, 0.008, 0.024, 0.002), mats.hub, 'rev', {y: (BODY.rampEnd - 10) / 1000, z, name: 'colour sensor'});
   }
 
   // ---------------------------------------------------------- the intakes: printed arms, TPU flap rollers, HD Hex each
@@ -360,6 +347,34 @@ export function buildRobot() {
       }
     }
     g.add(roll);
+    // the printed lip the ball climbs, from the tiles to the plywood ramp
+    {
+      const lipPts = [[0.002, FRONT_M], [0.026, 0.268], [0.058, 0.24], [BODY.rampStart / 1000, HL_M]].map(([y, z]) => new V3(0, y, sz * z - g.position.z));
+      const c = new THREE.CatmullRomCurve3(lipPts);
+      const n = 24;
+      const fl = [];
+      const idx = [];
+      for (let i = 0; i <= n; i++) {
+        const q = c.getPoint(i / n);
+        fl.push(-0.05, q.y - 0.003, q.z, 0.05, q.y - 0.003, q.z);
+        if (i) idx.push(2 * i - 2, 2 * i - 1, 2 * i, 2 * i - 1, 2 * i + 1, 2 * i);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(fl, 3));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      const lm = add(g, geo, mats.printedLight, 'printed', {name: 'intake lip'});
+      lm.material = mats.printedLight;
+      lm.userData.base = mats.printedLight;
+    }
+    // the lift roller over the lip pushes each ball up onto the ramp; same motor, one belt
+    const roll2 = new THREE.Group();
+    roll2.position.set(0, LIFT_ROLLER.y, sz * LIFT_ROLLER.z - g.position.z);
+    add(roll2, cylX(0.0045, 0.12, 8), mats.steel, 'rev');
+    for (const x of [-0.03, 0, 0.03]) {
+      add(roll2, cylX(0.022, 0.014, 20), mats.tpu, 'tpu', {x});
+    }
+    g.add(roll2);
     // the intake motor above the arm, belted down to the roller
     const mo = new THREE.Group();
     mo.position.set(0.12, 0.128, zr - sz * 0.01);
@@ -368,7 +383,7 @@ export function buildRobot() {
     g.add(mo);
     add(g, box(0.006, 0.06, 0.012, 0.002), mats.rubber, 'rev', {x: 0.172, y: 0.103, z: zr});
     root.add(g);
-    intakes[side] = {g, roll};
+    intakes[side] = {g, roll, roll2};
   }
 
   // ---------------------------------------------------------- the Limelight 3A on a printed mast, pitched up
@@ -430,10 +445,14 @@ export function buildRobot() {
     add(pinion, gearGeo(T.pinT, T.module, 0.008, 0.003), mats.printedLight, 'printed');
     base.add(pinion);
     add(base, box(0.04, 0.036, 0.02, 0.003), mats.servo, 'rev', {x: px, y: -0.022, z: pz, name: 'turret servo'});
-    // the Through Bore Encoder on the ring's axis, under the deck, offset beside the ball tube
+    // the Through Bore Encoder rides the ring on the deck, opposite the pinion, through its own 30T gear
+    const encGear = new THREE.Group();
     {
-      const ea = pa + (sx > 0 ? -0.9 : 0.9);
-      add(base, box(0.04, 0.012, 0.04, 0.004), mats.hub, 'rev', {x: Math.cos(ea) * 0.082, y: -0.012, z: Math.sin(ea) * 0.082, name: 'through bore'});
+      const ea = pa + Math.PI;
+      encGear.position.set(Math.cos(ea) * (rr + pr), 0.012, Math.sin(ea) * (rr + pr));
+      add(encGear, gearGeo(T.pinT, T.module, 0.008, 0.003), mats.printedLight, 'printed');
+      base.add(encGear);
+      add(base, box(0.04, 0.012, 0.04, 0.004), mats.hub, 'rev', {x: encGear.position.x, y: 0.028, z: encGear.position.z, name: 'through bore'});
     }
 
     // turning: the ring gear and everything above it
@@ -507,7 +526,7 @@ export function buildRobot() {
     // the hood servo on the outer cheek
     add(yawG, box(0.02, 0.04, 0.04, 0.003), mats.servo, 'rev', {x: sx * (T.cheek + 0.013), y: pivY, z: 0.0, name: `${key} hood servo`});
     // a muzzle lip where the ball leaves
-    turrets[key] = {base, yawG, pod, fly, feeder, pinion, key};
+    turrets[key] = {base, yawG, pod, fly, feeder, pinion, encGear, key};
   }
 
   // ---------------------------------------------------------- the envelope discs (ENVELOPES display)
@@ -545,12 +564,12 @@ export function buildRobot() {
   };
   let lastLook = '';
   const setLook = (parts_, xray) => {
-    const key = `${parts_ ? 1 : 0}${xray ? 1 : 0}`;
+    const key = `${parts_ ? 1 : 0}${xray ? 1 : 0}${bodyKey}`;
     if (key === lastLook) return;
     lastLook = key;
     for (const m of parts) {
       let mat = parts_ ? catMats[m.userData.cat] || m.userData.base : m.userData.base;
-      if (xray && m.userData.shell) mat = ghostOf(mat);
+      if (xray && m.userData.shell) mat = Array.isArray(mat) ? mat.map(ghostOf) : ghostOf(mat);
       m.material = mat;
       m.castShadow = !(xray && m.userData.shell);
     }
@@ -565,6 +584,8 @@ export function buildRobot() {
       t.yawG.rotation.y = s.yaw;
       // ring 60T, pinion 30T: the pinion turns twice as far, the other way
       t.pinion.rotation.y = -s.yaw * (R.turret[key].ringT / R.turret[key].pinT);
+      t.encGear.rotation.y = -s.yaw * (R.turret[key].ringT / R.turret[key].pinT);
+      for (const w of lifts[key]) w.rotation.x = st.lift?.[key] ?? 0;
       // pod pitch: launch line +z tilted up by the hood angle
       t.pod.rotation.x = -s.hood;
       t.fly[0].rotation.x = s.fly;
@@ -575,12 +596,13 @@ export function buildRobot() {
     }
     intakes.front.roll.rotation.x = st.roll.front;
     intakes.rear.roll.rotation.x = -st.roll.rear;
-    diverter.rotation.y = (st.divert ?? 0) * 0.5;
+    intakes.front.roll2.rotation.x = st.roll.front * 0.8;
+    intakes.rear.roll2.rotation.x = -st.roll.rear * 0.8;
+    setBody(st.material ?? 'ply');
     for (const p of pods) p.wh.rotation.x = st.podSpin?.[p.dir] ?? 0;
     setLook(!!st.partsMode, (st.xray ?? 0) > 0.5);
   };
-  void colorSensor;
-  return {root, update, turrets, intakes, parts, shells, mats, env, DECK_Y};
+  return {root, update, turrets, intakes, parts, shells, mats, env, DECK_Y, setBody};
 }
 
 export const PART_NOTES = {

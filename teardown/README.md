@@ -6,9 +6,37 @@ plays a short match routine. Any click, drag, wheel turn or key hands you the co
 The robot has two self-aiming turrets, one for POLLEN (71 mm) and one for NECTAR (91 mm). They can never hit each
 other. Both shoot a backspin arc into the upward-facing CELL while the robot drives. A front and a rear intake pull
 POLLEN out through a FLOWER's bottom retrieval opening, and the turrets lob POLLEN or NECTAR in through the FLOWER's
-4 in. top. Every gauge on the console reads the same functions that move the parts.
+4 in. top. A passive size sorter sends each ball to its turret, and a servo lift in each tower carries it up.
+
+The body is laser-cut, slot and tab: 6 mm birch plywood for the first iteration, 3 mm 5052 aluminium once it is
+tuned. The cut files in `cut/` come from the same model as the 3D view, so the two can't disagree. Every gauge on the
+console reads the same functions that move the parts.
 
 Built with the `teardown` skill in `.claude/skills/teardown`.
+
+## Cut the body
+
+`cut/ply/` and `cut/alu/` each hold the whole body (`cut/ply/preview.png` shows the plywood sheets):
+
+- `sheet-1` … `sheet-4`: every part nested on a 610 × 610 mm bed, as SVG and DXF.
+- `parts/`: each part on its own.
+- `parts.csv`: the part list with sizes.
+- `fit-comb`: a comb with slots from t − 0.1 to t + 0.4 mm, and a matching tab.
+
+In the SVGs, red is cut and blue is engrave (the part name). In the DXFs, the layers are `CUT` and `ENGRAVE`. All
+units are millimetres.
+
+1. **Cut the fit comb first** and find the slot your sheet and laser press-fit into. Plywood is rarely exactly 6 mm.
+2. **Set `clear` to match.** It's in `MATERIALS` in `pollinator-shared/plates.js`.
+3. **Regenerate:** `node teardown/pollinator-shared/cutfiles.mjs` (add `--sheet 600x400` for another bed size).
+4. **Check your hardware against `HOLES`** in the same file. The axle-bearing and hub-standoff sizes are placeholders,
+   so measure the parts you have.
+
+The deck and the belly are 457 mm square, so they need a bed at least that big, or a cutting service.
+
+The joints are designed so the plates can't move. Every slot is cut from the 3D footprint of the tab that goes
+through it. A check confirms that all 106 tabs land in solid material, with no slot in a hole and no web under 3 mm.
+That check passes for both materials.
 
 ## Build and open
 
@@ -24,7 +52,8 @@ Open `teardown/out/dist/pollinator-live.html`. It is one offline file of about 8
 **Controls:** ROUTINE jumps to a chapter. The timeline scrubs, and SPEED sets the pace. Drag the 3D view to orbit and
 use the wheel to zoom.
 
-**Keys:** `1`-`6` views, `space` play/pause, `←`/`→` seek, `x` x-ray, `a` arcs, `e` envelopes, `l` labels, `p` parts.
+**Keys:** `1`-`7` views, `space` play/pause, `←`/`→` seek, `x` x-ray, `a` arcs, `e` envelopes, `l` labels, `p` parts,
+`m` plywood/aluminium.
 
 To render the film to video, use `.claude/skills/teardown/sims/capture.mjs pollinator-film`. It needs ffmpeg and a
 GPU, because a software renderer takes seconds per frame. The procedural score is `pollinator-shared/score.py`.
@@ -35,7 +64,9 @@ GPU, because a software renderer takes seconds per frame. The procedural score i
 |---|---|
 | `pollinator-shared/robot.js` | The math. The game dimensions from the manual, the robot's design numbers, flight with drag and backspin lift, the drive-by aim solver, mecanum kinematics and Limelight visibility. No three.js. |
 | `pollinator-shared/routine.js` | The match routine as one clock. It covers the path, every shot (solved at load with the solver above), every ball's story, the HIVE tip, the localization error, and the turret modes. |
-| `pollinator-shared/paths.js` | Where a ball travels inside the robot: the ramps, the sorter and the lanes. Shared by the geometry and the routine. |
+| `pollinator-shared/paths.js` | The body layout in millimetres (ramp, sorter and tower heights) and every path a ball takes inside the robot. Shared by the plates, the geometry and the routine. |
+| `pollinator-shared/plates.js` | The laser-cut body: 25 plates as 2D outlines with tabs, placed in 3D, with slots cut from the tabs' footprints. Plywood or aluminium. |
+| `pollinator-shared/cutfiles.mjs` | Writes `cut/`: SVG and DXF per part, nested sheets, a fit comb, a part list. |
 | `pollinator-shared/build.js` | The robot geometry, built from code out of REV parts, printed parts and the two required sensors. |
 | `pollinator-shared/field.js` | The field: tiles, perimeter, the HIVE with its rocking CELLs, FLOWERs, POLLEN and NECTAR. |
 | `pollinator-shared/stage.js`, `console.js` | The renderer, and the 1600 × 900 console overlay. |
@@ -63,6 +94,24 @@ flywheels at their worst hood angle, the pocketed cheek discs, and the motor beh
 angles, and neither turret needs a keep-out zone. Both stay inside the 18 in. frame, with 9 mm to spare on the NECTAR
 side.
 
+**Sorting, by size.** The sorter is a channel across the middle of the robot. Its two walls stand 80 mm apart, and
+both ramps end at it.
+- **POLLEN (71 mm)** drops between the walls. The channel floor falls 4 mm toward the pollen tower, and the ball rolls
+  there.
+- **NECTAR (91 mm)** can't fit. It sinks 24 mm between the wall tops and rides them like rails, which fall 4 mm the
+  other way, into the nectar tower.
+
+There's no diverter and no decision to make, so the diverter servo is gone. NECTAR clears the channel floor by 2.5 mm
+or more all the way. A REV Color Sensor V3 under each ramp's top counts the balls and catches a red NECTAR, which
+reverses the intake (G408: no controlling opponent NECTAR).
+
+**Transfer.** Each tower is a square tube on its turret's axis: 80 mm for POLLEN, 100 mm for NECTAR. Three TPU
+compliant wheels on one belt sit behind the tower's rear wall and reach 10 mm in through a window. One continuous
+Smart Robot Servo drives them.
+- **The lane holds 2:** one ball waits at the top of the lift, stalled under the deck with its top already in the
+  bore. The next waits at the foot.
+- **Firing:** the lift throws the top ball up through the bore and the turret ring, into the turret's feeder.
+
 **FLOWER work.** The intake roller's TPU flaps reach 42 mm from a 50 mm-high axle. The whole roller therefore fits the
 3.55 in. retrieval opening, so POLLEN comes out of the bottom only (G418.B). Placing goes in through the top only
 (G418.A): the turret switches to a lob at 2.5 m/s and 62°. NECTAR goes last so that it is the top-most NECTAR, which
@@ -72,11 +121,12 @@ owns the FLOWER.
 
 | Source | Parts |
 |---|---|
-| **REV Robotics** | 8 × HD Hex Motor with UltraPlanetary: 4 drive (4:1 + 3:1 → 1.96 m/s free), 2 flywheel (3:1), 2 intake. 7 × Smart Robot Servo: 2 turret yaw (continuous), 2 hood, 2 feeder (continuous), 1 sorter diverter. 4 × 75 mm Mecanum Wheel. Control Hub + Expansion Hub. 2 × Through Bore Encoder (turret angle). Color Sensor V3 (POLLEN/NECTAR sort). 15 mm extrusion frame and uprights, 5 mm hex shafts, bearings, fasteners. Slim Battery. |
-| **3D-printed** (PETG-CF; TPU where noted) | Turret deck (4 tiles), corner gussets, wheel bearing blocks. 2 × 60T m2 turret ring gears on printed ball-bearing races, 2 × 30T pinions. 4 × pocketed cheek discs, 4 × pod plates. 4 × 64 mm flywheel hubs with TPU tyres, 2 × 40T/47T gear pairs. Intake ramps, sorter bowl, diverter flap, 2 ball lanes. Intake arms, roller hubs, TPU flaps. Limelight mast. |
+| **Laser-cut** (6 mm birch ply, then 3 mm 5052 aluminium) | 2 side plates, deck, belly pan, 4 bulkhead legs, 4 ramp walls + 2 ramp floors, 2 sorter walls (their tops are the NECTAR rails, and they are the pollen tower's sides) + the channel floor, the pollen tower's outer wall, 3 nectar tower walls, 4 drive-motor plates. 25 plates, slot and tab. |
+| **REV Robotics** | 8 × HD Hex Motor with UltraPlanetary: 4 drive (4:1 + 3:1 → 1.96 m/s free), 2 flywheel (3:1), 2 intake (each also drives the lift roller over its lip). 8 × Smart Robot Servo: 2 turret yaw (continuous), 2 hood, 2 turret feeder (continuous), 2 tower lift (continuous). 4 × 75 mm Mecanum Wheel. Control Hub + Expansion Hub. 2 × Through Bore Encoder (turret angle, geared to the ring on the deck). 2 × Color Sensor V3 (ball count, red-NECTAR reject). 5 mm hex shafts, bearings, fasteners. Slim Battery, strapped on the deck. |
+| **3D-printed** (PETG-CF; TPU where noted) | 2 × 60T m2 turret ring gears on printed ball-bearing races, 4 × 30T gears (pinions and encoder gears). 4 × pocketed cheek discs, 4 × pod plates. 4 × 64 mm flywheel hubs with TPU tyres, 2 × 40T/47T gear pairs. 2 intake lips, intake arms, roller hubs, TPU flaps. 6 TPU lift wheels and 2 lift brackets. Limelight mast. Turret spacers for the 3 mm aluminium deck. |
 | **Other COTS** | Limelight 3A (the only vision coprocessor R702 allows). goBILDA Pinpoint + 2 goBILDA odometry pods. 6 mm BBs for the printed turret bearings. An HTD belt for the flywheel step-up. |
 
-The robot uses **8/8 motors and 7/8 servos** (R503). It starts within 18 × 18 × 18 in. (R102). Both intakes swing 3 in.
+The robot uses **8/8 motors and 8/8 servos** (R503). It starts within 18 × 18 × 18 in. (R102). Both intakes swing 3 in.
 out at the start: 18 + 2 × 3 = 24 in., which is exactly the R105 length. It never holds more than 4 elements (G407).
 
 ## What is modelled and what is assumed

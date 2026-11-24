@@ -7,7 +7,7 @@
 // and then its NECTAR into the same FLOWER's top (top-most NECTAR owns it), reverses through the spill collecting 2
 // POLLEN with the rear intake while shooting into the CELL that is now up, and ends with both turrets sweeping their
 // full range past each other.
-import {FRONT, LANE, RAMP_FLOOR, SORT_Y} from './paths.js';
+import {FRONT, intakePath, liftPath, slot, sortPath} from './paths.js';
 import {BALL, FIELD, FLOWER, FLOWERS, HIVE, R, cellTarget, fly, hiveCell, landing, llSees, mecanum, motorRpm, solveShot, toWorld, wrap, D2R, G} from './robot.js';
 
 const smoother = (x) => {
@@ -18,7 +18,7 @@ const ss = (a, b, t) => smoother((t - a) / (b - a));
 const lerp = (a, b, k) => a + (b - a) * k;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 
-export const DURATION = 29;
+export const DURATION = 30;
 const HX = HIVE.blueX;
 const FL = FLOWERS[0];
 // where the robot sits to pull from the FLOWER: the front intake's mouth just inside the retrieval opening
@@ -102,18 +102,8 @@ export const rockerAt = (t) => {
 export const upCellAt = (t) => (t < tipState.t + 0.45 ? 1 : -1);
 export const tipTime = () => tipState.t;
 
-// ------------------------------------------------------------ ball paths inside the robot (robot frame: x left, z fwd)
-const Y = (kind) => BALL[kind].d / 2;
-const lane = (key) => (key === 'pollen' ? 1 : -1);
+// ------------------------------------------------------------ ball paths inside the robot: paths.js
 const T_ = (key) => R.turret[key];
-const PATHS = {
-  front: (k) => [...RAMP_FLOOR.map(([x, y, z]) => [x, y + Y(k), z]), [0, SORT_Y + Y(k), 0.05]],
-  rear: (k) => [...RAMP_FLOOR.map(([x, y, z]) => [x, y + Y(k), -z]), [0, SORT_Y + Y(k), 0.05]],
-  // the sorter, the colour sensor under it, then a lane each side up into the turret's hollow ring
-  lane: (key) => LANE(key),
-};
-// up to two balls queue in a lane: slot 0 inside the turret ring, slot 1 behind it
-const slot = (key, i) => (i === 0 ? [T_(key).x, 0.222, T_(key).z] : LANE(key)[1]);
 const polyAt = (pts, u) => {
   const L = [0];
   for (let i = 1; i < pts.length; i++) L.push(L[i - 1] + Math.hypot(...pts[i].map((v, j) => v - pts[i - 1][j])));
@@ -185,7 +175,7 @@ const advance = (key, t) => {
   const q = carried[key];
   if (q[0]) {
     endSeg(q[0], t);
-    q[0].segs.push({t0: t, t1: t + 0.3, type: 'rpath', pts: [slot(key, 1), slot(key, 0)]}, {t0: t + 0.3, t1: 1e9, type: 'robot', q: slot(key, 0)});
+    q[0].segs.push({t0: t, t1: t + LIFT_T, type: 'rpath', pts: liftPath(key), lift: key}, {t0: t + LIFT_T, t1: 1e9, type: 'robot', q: slot(key, 0)});
   }
 };
 
@@ -234,27 +224,30 @@ function fire(t, key, {place = false} = {}) {
   advance(key, t);
   return tl;
 }
+const RIDE = 0.7; // mouth to the sorter
+const SORT_T = 0.45; // sorter to the tower base
+const LIFT_T = 0.45; // up the lift
 function pick(t, side, kind, b, {fromFlower = false} = {}) {
-  // the ball is at the intake mouth at t; it rides the intake, the sorter turns it to its lane, it queues
+  // the ball is at the intake mouth at t: it rides the lip and the ramp, drops onto the sorter, which sends it by size
+  // to its tower; the lift carries it to the top if the lane is empty, otherwise it waits at the bottom
   const key = kind;
   const qi = carried[key].length;
-  const path = PATHS[side](kind);
-  const ride = 0.55;
-  const toLane = 0.4;
+  const path = intakePath(side, kind);
   endSeg(b, t - (fromFlower ? 0.35 : 0));
   if (fromFlower) {
     // pulled horizontally out of the retrieval opening into the mouth
     b.segs.push({t0: t - 0.35, t1: t, type: 'pull', f: 0, to: path[0]});
   }
-  b.segs.push({t0: t, t1: t + ride, type: 'rpath', pts: path});
-  const lanePts = [...PATHS.lane(key)];
-  const dest = slot(key, qi === 0 ? 0 : 1);
-  if (qi > 0) lanePts.splice(2, 1, dest);
-  else lanePts[2] = dest;
-  b.segs.push({t0: t + ride, t1: t + ride + toLane, type: 'rpath', pts: lanePts, sort: true});
-  b.segs.push({t0: t + ride + toLane, t1: 1e9, type: 'robot', q: dest});
+  b.segs.push({t0: t, t1: t + RIDE, type: 'rpath', pts: path});
+  const ts = t + RIDE;
+  b.segs.push({t0: ts, t1: ts + SORT_T, type: 'rpath', pts: sortPath(kind), sort: kind});
+  const tb = ts + SORT_T;
+  if (qi === 0) {
+    b.segs.push({t0: tb, t1: tb + LIFT_T, type: 'rpath', pts: liftPath(key), lift: key});
+    b.segs.push({t0: tb + LIFT_T, t1: 1e9, type: 'robot', q: slot(key, 0)});
+  } else b.segs.push({t0: tb, t1: 1e9, type: 'robot', q: slot(key, 1)});
   carried[key].push(b);
-  PICKS.push({t, side, ball: b, sorted: t + ride});
+  PICKS.push({t, side, ball: b, sorted: ts, kind});
 }
 
 // drive-by #1 into the audience CELL
@@ -268,7 +261,10 @@ tipState.t = lastLand + 0.42;
 {
   const order = [...inCell[1]];
   // our two POLLEN go to the first two rest points, so the rear intake finds them
-  order.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'pollen' ? -1 : 1));
+  // a POLLEN and then a NECTAR land where the reversing robot's rear intake will run over them
+  const pol = order.filter((b) => b.kind === 'pollen');
+  const nec = order.filter((b) => b.kind === 'nectar');
+  order.splice(0, order.length, pol[0], nec[nec.length - 1], ...pol.slice(1), ...nec.slice(0, -1));
   order.forEach((b, i) => {
     const ts = tipState.t + 0.34 + i * 0.07;
     const s = endSeg(b, ts);
@@ -287,20 +283,20 @@ fire(15.3, 'nectar', {place: true});
 // reverse through the spill: the rear intake collects, the pollen turret keeps shooting into the CELL now up
 fire(18.6, 'pollen');
 {
-  const spilled = BALLS.filter((b) => b.segs.some((s) => s.type === 'spill') && b.kind === 'pollen');
-  pick(19.4, 'rear', 'pollen', spilled[0]);
-  pick(20.9, 'rear', 'pollen', spilled[1]);
+  const at = (i) => BALLS.find((b) => b.segs.some((s) => s.type === 'spill' && s.rest === SPILL_REST[i]));
+  pick(19.4, 'rear', 'pollen', at(0));
+  pick(20.9, 'rear', 'nectar', at(1));
 }
-fire(20.55, 'pollen');
-fire(21.95, 'pollen');
+fire(21.2, 'pollen');
+fire(22.75, 'nectar');
 
 // ------------------------------------------------------------ the turrets
 // modes: track (the live solution on the CELL that is up), place (the FLOWER top), sweep (the clearance check), home
 const MODES = {
-  pollen: [[0, 'track'], [12.4, 'place'], [14.6, 'track'], [22.5, 'sweep'], [26.4, 'home']],
-  nectar: [[0, 'track'], [12.4, 'place'], [16.0, 'track'], [22.5, 'sweep'], [26.4, 'home']],
+  pollen: [[0, 'track'], [12.4, 'place'], [14.6, 'track'], [23.4, 'sweep'], [27.3, 'home']],
+  nectar: [[0, 'track'], [12.4, 'place'], [16.0, 'track'], [23.4, 'sweep'], [27.3, 'home']],
 };
-const SWEEP = [22.5, 26.4];
+const SWEEP = [23.4, 27.3];
 const sweepYaw = (key, t) => {
   const u = (t - SWEEP[0]) / (SWEEP[1] - SWEEP[0]);
   // out to one stop, across to the other, back to zero; the two turrets go opposite ways
@@ -394,6 +390,9 @@ const NT = Math.ceil((DURATION + 1) / DT);
 const WHEEL = [new Float32Array(NT), new Float32Array(NT), new Float32Array(NT), new Float32Array(NT)];
 const FLY = {pollen: new Float32Array(NT), nectar: new Float32Array(NT)};
 const ROLL = {front: new Float32Array(NT), rear: new Float32Array(NT)};
+const LIFT = {pollen: new Float32Array(NT), nectar: new Float32Array(NT)};
+/** a lift runs while a ball rides it, and while it throws the top ball up into the turret */
+export const liftOn = (key, t) => BALLS.some((b) => b.segs.some((s) => t >= s.t0 && t < s.t1 && ((s.type === 'rpath' && s.lift === key) || (s.type === 'feed' && s.key === key))));
 export const intakeOn = (side, t) => PICKS.some((p) => p.side === side && t > p.t - 0.8 && t < p.t + 0.6);
 for (let i = 1; i < NT; i++) {
   const t = (i - 0.5) * DT;
@@ -408,6 +407,7 @@ for (let i = 1; i < NT; i++) {
   for (let j = 0; j < 4; j++) WHEEL[j][i] = WHEEL[j][i - 1] + w[j] * DT;
   for (const key of ['pollen', 'nectar']) FLY[key][i] = FLY[key][i - 1] + ((turretAt(key, t).rpm * 2 * Math.PI) / 60) * DT;
   for (const side of ['front', 'rear']) ROLL[side][i] = ROLL[side][i - 1] + (intakeOn(side, t) ? 28 : 0) * DT;
+  for (const key of ['pollen', 'nectar']) LIFT[key][i] = LIFT[key][i - 1] + (liftOn(key, t) ? 16 : 0) * DT;
 }
 const look = (A, t) => {
   const u = clamp(t / DT, 0, NT - 1.001);
@@ -417,6 +417,7 @@ const look = (A, t) => {
 export const wheelAngles = (t) => WHEEL.map((A) => look(A, t));
 export const flyAngle = (key, t) => look(FLY[key], t);
 export const rollerAngle = (side, t) => look(ROLL[side], t);
+export const liftAngle = (key, t) => look(LIFT[key], t);
 export const wheelRpm = (t) => {
   const p = poseAt(t);
   const v = velAt(t);
